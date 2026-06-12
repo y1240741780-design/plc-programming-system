@@ -322,6 +322,182 @@ class STGenerator:
         lines.append("END_IF;")
         return lines
 
+    # ────────────────────────────────────────────
+    #  流程图结构 → ST 代码转换
+    # ────────────────────────────────────────────
+    def generate_from_flowchart(self, structure: dict, program_name: str, platform_id: str) -> str:
+        """
+        将流程图结构（JSON）转换为 ST 代码
+        structure 格式:
+        {
+            "nodes": [
+                {"id": "start", "type": "start", "label": "开始"},
+                {"id": "step1", "type": "process", "label": "启动电机"},
+                {"id": "check", "type": "decision", "label": "急停按下?", "yes": "halt", "no": "step2"},
+                {"id": "step2", "type": "process", "label": "正常运行"},
+                {"id": "halt", "type": "process", "label": "安全停机"},
+                {"id": "end", "type": "end", "label": "结束"}
+            ],
+            "edges": [{"from": "start", "to": "step1"}, ...],
+            "io_points": [...]
+        }
+        """
+        nodes = {n["id"]: n for n in structure.get("nodes", [])}
+        edges = structure.get("edges", [])
+        io_points = structure.get("io_points", [])
+
+        lines = []
+        lines.append(f"// ============================================")
+        lines.append(f"// 流程图 → ST 代码自动生成")
+        lines.append(f"// 程序名称: {program_name}")
+        lines.append(f"// 目标平台: {self.platforms.get(platform_id, {}).get('name', platform_id)}")
+        lines.append(f"// 生成时间: {self._now()}")
+        lines.append(f"// ============================================")
+        lines.append("")
+
+        # PROGRAM 声明
+        lines.append(f"PROGRAM {program_name}")
+        lines.append("VAR")
+
+        # IO 变量
+        for io in io_points:
+            name = io.get("name", "Unnamed")
+            addr = io.get("address", "")
+            io_type = io.get("type", "BOOL")
+            addr_str = f"AT {addr} " if addr else ""
+            comment = io.get("comment", "")
+            comment_str = f"  // {comment}" if comment else ""
+            lines.append(f"    {name} {addr_str}: {io_type};{comment_str}")
+
+        if not io_points:
+            lines.append("    // 请在流程图中定义 IO 点")
+
+        # 内部变量：为每个非 IO 的节点生成辅助变量
+        for node in structure.get("nodes", []):
+            if node.get("type") == "decision":
+                lines.append(f"    {node['id']}_result : BOOL;  // {node.get('label', '')}")
+
+        lines.append("END_VAR")
+        lines.append("")
+
+        # 根据节点类型生成逻辑
+        lines.append("// === 流程图逻辑 ===")
+        lines.append("")
+
+        # 构建邻接表
+        adj = {}
+        for edge in edges:
+            frm = edge["from"]
+            to = edge["to"]
+            if frm not in adj:
+                adj[frm] = []
+            adj[frm].append((to, edge.get("label", "")))
+
+        # 找到起始节点
+        start_nodes = [n for n in structure.get("nodes", []) if n.get("type") == "start"]
+        if not start_nodes:
+            start_nodes = [structure["nodes"][0]] if structure.get("nodes") else []
+
+        # 从起始节点开始生成
+        visited = set()
+
+        def gen_node(node_id, indent=0):
+            if node_id in visited or node_id not in nodes:
+                return
+            visited.add(node_id)
+
+            node = nodes[node_id]
+            node_type = node.get("type", "process")
+            label = node.get("label", node_id)
+            prefix = "    "
+
+            if node_type == "start":
+                lines.append(f"{prefix}// → {label}")
+                for next_id, _ in adj.get(node_id, []):
+                    gen_node(next_id, indent)
+
+            elif node_type == "process":
+                lines.append(f"{prefix}// {label}")
+                # 尝试生成对应的 ST 代码
+                code = self._infer_st_from_label(label)
+                if code:
+                    lines.append(f"{prefix}{code}")
+                else:
+                    lines.append(f"{prefix}// TODO: {label}")
+                for next_id, _ in adj.get(node_id, []):
+                    gen_node(next_id, indent)
+
+            elif node_type == "decision":
+                lines.append(f"{prefix}// 判断: {label}")
+                yes_targets = [t for t, l in adj.get(node_id, []) if l.lower() in ("yes", "是", "y", "true", "真")]
+                no_targets = [t for t, l in adj.get(node_id, []) if l.lower() in ("no", "否", "n", "false", "假")]
+
+                condition_var = node.get("condition", f"{label}_Condition")
+                lines.append(f"{prefix}IF {condition_var} THEN")
+                for t in yes_targets:
+                    gen_node(t, indent + 1)
+                if no_targets:
+                    lines.append(f"{prefix}ELSE")
+                    for t in no_targets:
+                        gen_node(t, indent + 1)
+                lines.append(f"{prefix}END_IF;")
+
+                # 也处理未标记的后续节点
+                for t, l in adj.get(node_id, []):
+                    if l.lower() not in ("yes", "no", "是", "否", "y", "n", "true", "false", "真", "假"):
+                        gen_node(t, indent)
+
+            elif node_type == "end":
+                lines.append(f"{prefix}// ← {label}")
+
+            elif node_type == "loop":
+                lines.append(f"{prefix}// 循环: {label}")
+                lines.append(f"{prefix}WHILE {label}_Continue DO")
+                for next_id, _ in adj.get(node_id, []):
+                    gen_node(next_id, indent + 1)
+                lines.append(f"{prefix}END_WHILE;")
+
+            else:
+                for next_id, _ in adj.get(node_id, []):
+                    gen_node(next_id, indent)
+
+        # 执行生成
+        for start_node in start_nodes:
+            gen_node(start_node["id"])
+
+        lines.append("")
+        lines.append(f"END_PROGRAM")
+        return "\n".join(lines)
+
+    def _infer_st_from_label(self, label: str) -> str:
+        """根据中文标签推断 ST 代码"""
+        label_lower = label.lower()
+
+        if any(kw in label_lower for kw in ["启动", "start", "开启", "运行"]):
+            if "电机" in label_lower or "motor" in label_lower:
+                return "MotorOutput := TRUE;"
+            return "Output := TRUE;"
+
+        if any(kw in label_lower for kw in ["停止", "stop", "关闭", "停机"]):
+            return "MotorOutput := FALSE;  // 安全停机"
+
+        if any(kw in label_lower for kw in ["急停", "emergency", "紧急"]):
+            return "MotorOutput := FALSE;  // 急停触发"
+
+        if any(kw in label_lower for kw in ["检测", "sensor", "传感器", "判断"]):
+            return "SensorValue := TRUE;  // 传感器检测"
+
+        if any(kw in label_lower for kw in ["报警", "alarm", "故障"]):
+            return "AlarmOutput := TRUE;"
+
+        if any(kw in label_lower for kw in ["延时", "delay", "等待"]):
+            return "DelayTimer(IN := TRUE, PT := T#2S);"
+
+        if any(kw in label_lower for kw in ["计数", "count"]):
+            return "Counter(CU := Trigger, PV := 10);"
+
+        return ""
+
     def _load_template_content(self, scenario: str, template_name: str) -> Optional[str]:
         """加载模板内容"""
         base = Path(__file__).resolve().parent.parent

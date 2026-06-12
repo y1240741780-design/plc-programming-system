@@ -299,6 +299,124 @@ def get_project(project_id):
     return jsonify({"error": "项目不存在"}), 404
 
 
+@app.route("/api/projects/<project_id>", methods=["DELETE"])
+def delete_project(project_id):
+    """删除项目"""
+    projects = load_projects()
+    projects = [p for p in projects if p["id"] != project_id]
+    save_projects(projects)
+    return jsonify({"status": "deleted"})
+
+
+@app.route("/api/projects/<project_id>", methods=["PUT"])
+def update_project(project_id):
+    """更新项目代码"""
+    data = request.get_json()
+    projects = load_projects()
+    for p in projects:
+        if p["id"] == project_id:
+            if "code" in data:
+                p["code"] = data["code"]
+            if "name" in data:
+                p["name"] = data["name"]
+            p["updated"] = datetime.now().isoformat()
+            save_projects(projects)
+            return jsonify(p)
+    return jsonify({"error": "项目不存在"}), 404
+
+
+# ──────────────────────────────────────────────────
+#  图片上传 + 流程图识别
+# ──────────────────────────────────────────────────
+UPLOAD_DIR = BASE_DIR / "输出" / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
+
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+@app.route("/api/upload-image", methods=["POST"])
+def upload_image():
+    """上传流程图图片"""
+    if 'file' not in request.files:
+        return jsonify({"error": "请选择文件"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "文件名为空"}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({"error": f"不支持的格式，允许: {', '.join(ALLOWED_EXTENSIONS)}"}), 400
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ext = file.filename.rsplit('.', 1)[1].lower()
+    filename = f"flowchart_{timestamp}.{ext}"
+    filepath = UPLOAD_DIR / filename
+    file.save(str(filepath))
+
+    return jsonify({
+        "status": "ok",
+        "filename": filename,
+        "path": str(filepath),
+        "url": f"/api/uploads/{filename}",
+        "size": filepath.stat().st_size
+    })
+
+
+@app.route("/api/analyze-flowchart", methods=["POST"])
+def analyze_flowchart():
+    """
+    分析流程图图片，提取流程结构
+    返回识别到的步骤、分支、循环等
+    """
+    data = request.get_json()
+    filename = data.get("filename")
+    if not filename:
+        return jsonify({"error": "请提供文件名"}), 400
+
+    filepath = UPLOAD_DIR / filename
+    if not filepath.exists():
+        return jsonify({"error": "文件不存在，请先上传"}), 404
+
+    # 返回图片路径供前端展示，实际 AI 识别由 Hermes 对话驱动完成
+    return jsonify({
+        "status": "ready",
+        "filename": filename,
+        "path": str(filepath),
+        "message": "图片已就绪，请通过 Hermes 对话发送图片进行 AI 识别",
+        "prompt_hint": f"请分析这张流程图 {str(filepath)}，识别其中的流程步骤、判断分支、循环结构，并生成对应的 ST 代码框架"
+    })
+
+
+@app.route("/api/uploads/<filename>")
+def serve_upload(filename):
+    """提供上传文件访问"""
+    return send_from_directory(str(UPLOAD_DIR), filename)
+
+
+@app.route("/api/convert-flowchart-to-st", methods=["POST"])
+def convert_flowchart_to_st():
+    """
+    将流程图结构转换为 ST 代码
+    POST body: { "structure": {...}, "platform": "siemens", "program_name": "..." }
+    """
+    data = request.get_json()
+    structure = data.get("structure", {})
+    platform_id = data.get("platform", "generic")
+    program_name = data.get("program_name", "FlowchartProgram")
+
+    st_code = st_gen.generate_from_flowchart(structure, program_name, platform_id)
+
+    return jsonify({
+        "platform": platform_id,
+        "program_name": program_name,
+        "code": st_code
+    })
+
+
 # ──────────────────────────────────────────────────
 #  启动
 # ──────────────────────────────────────────────────
