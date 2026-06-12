@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PLC编程体系 — Hermes Agent</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        neon: { cyan: '#00f0ff', green: '#39ff14', purple: '#b347ea', pink: '#ff2d95', blue: '#0080ff' },
+        surface: { dark: '#0a0e17', card: '#111827', border: '#1e293b', hover: '#1a2332', text: '#e2e8f0', muted: '#94a3b8' }
+      },
+      fontFamily: { display: ['IBM Plex Sans'], code: ['JetBrains Mono'], body: ['Inter'] }
+    }
+  }
+}
+</script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0e17; color: #e2e8f0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+  ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+  
+  .glow-cyan { box-shadow: 0 0 15px rgba(0,240,255,0.15), inset 0 0 5px rgba(0,240,255,0.05); }
+  .glow-green { box-shadow: 0 0 10px rgba(57,255,20,0.1); }
+  .neon-border { border: 1px solid #1e293b; border-radius: 8px; background: #111827; }
+  .neon-input { background: #0a0e17; border: 1px solid #1e293b; color: #e2e8f0; border-radius: 6px; padding: 8px 12px; font-size: 14px; width: 100%; transition: border-color 0.2s; }
+  .neon-input:focus { outline: none; border-color: #00f0ff; box-shadow: 0 0 8px rgba(0,240,255,0.1); }
+  .neon-btn { padding: 8px 16px; border-radius: 6px; font-weight: 500; font-size: 14px; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary { background: linear-gradient(135deg, #00f0ff, #0080ff); color: #0a0e17; border: none; }
+  .btn-primary:hover { box-shadow: 0 0 20px rgba(0,240,255,0.3); transform: translateY(-1px); }
+  .btn-secondary { background: transparent; border: 1px solid #1e293b; color: #e2e8f0; }
+  .btn-secondary:hover { border-color: #00f0ff; }
+  .btn-success { background: linear-gradient(135deg, #39ff14, #00b300); color: #0a0e17; border: none; }
+  
+  .code-editor { font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; background: #0a0e17; border: 1px solid #1e293b; border-radius: 8px; padding: 16px; color: #e2e8f0; resize: none; width: 100%; min-height: 400px; tab-size: 4; }
+  .code-editor:focus { outline: none; border-color: #00f0ff; }
+  
+  .tab { padding: 10px 20px; cursor: pointer; border-bottom: 2px solid transparent; color: #94a3b8; font-weight: 500; transition: all 0.2s; }
+  .tab:hover { color: #e2e8f0; }
+  .tab.active { color: #00f0ff; border-bottom-color: #00f0ff; }
+  
+  .card { background: #111827; border: 1px solid #1e293b; border-radius: 10px; padding: 20px; }
+  .card-header { font-size: 16px; font-weight: 600; color: #00f0ff; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  
+  .platform-chip { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; border: 1px solid #1e293b; }
+  .platform-chip:hover { border-color: #00f0ff; }
+  .platform-chip.selected { background: rgba(0,240,255,0.1); border-color: #00f0ff; color: #00f0ff; }
+  
+  .tag { padding: 2px 8px; border-radius: 4px; font-size: 11px; background: rgba(0,240,255,0.1); color: #00f0ff; }
+  
+  .toast { position: fixed; top: 20px; right: 20px; background: #111827; border: 1px solid #39ff14; color: #39ff14; padding: 12px 20px; border-radius: 8px; z-index: 1000; animation: slideIn 0.3s; }
+  @keyframes slideIn { from { transform: translateX(400px); } to { transform: translateX(0); } }
+  
+  .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid #1e293b; border-top-color: #00f0ff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="flex h-screen">
+  <!-- 侧边栏 -->
+  <aside class="w-64 bg-[#0d1117] border-r border-[#1e293b] flex flex-col flex-shrink-0">
+    <div class="p-5 border-b border-[#1e293b]">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-gradient-to-br from-[#00f0ff] to-[#0080ff] rounded-lg flex items-center justify-center text-lg font-bold text-[#0a0e17]">PLC</div>
+        <div>
+          <h1 class="font-display font-bold text-base text-[#e2e8f0]">PLC编程体系</h1>
+          <p class="text-xs text-[#94a3b8]">Hermes Agent 驱动</p>
+        </div>
+      </div>
+    </div>
+    <nav class="flex-1 p-3 space-y-1">
+      <a href="#" onclick="switchTab('generate');return false" class="tab active w-full flex items-center gap-2" data-tab="generate">⚡ ST代码生成</a>
+      <a href="#" onclick="switchTab('templates');return false" class="tab w-full flex items-center gap-2" data-tab="templates">📋 模板库</a>
+      <a href="#" onclick="switchTab('projects');return false" class="tab w-full flex items-center gap-2" data-tab="projects">📁 项目管理</a>
+      <a href="#" onclick="switchTab('knowledge');return false" class="tab w-full flex items-center gap-2" data-tab="knowledge">📚 知识库</a>
+    </nav>
+    <div class="p-4 border-t border-[#1e293b] text-xs text-[#94a3b8]">
+      v1.0 &copy; Hermes Agent
+    </div>
+  </aside>
+
+  <!-- 主内容 -->
+  <main class="flex-1 overflow-auto p-6">
+    
+    <!-- ========== Tab: 代码生成 ========== -->
+    <div id="tab-generate" class="tab-content space-y-5">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-2xl font-display font-bold">⚡ ST 代码生成</h2>
+          <p class="text-sm text-[#94a3b8] mt-1">配置参数 → 生成 IEC 61131-3 结构化文本程序</p>
+        </div>
+        <div class="flex gap-2">
+          <button class="neon-btn btn-secondary" onclick="validateCode()">🔍 语法检查</button>
+          <button class="neon-btn btn-primary" onclick="generateCode()">🚀 生成代码</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <!-- 左侧：参数面板 -->
+        <div class="space-y-5">
+          <div class="card">
+            <div class="card-header">🎯 目标平台</div>
+            <div class="flex flex-wrap gap-2" id="platform-chips"></div>
+          </div>
+          <div class="card">
+            <div class="card-header">📂 应用场景</div>
+            <select class="neon-input" id="scenario-select" onchange="onScenarioChange()">
+              <option value="basic_logic">基础逻辑控制</option>
+              <option value="production_line">产线自动化</option>
+              <option value="process_control">过程控制</option>
+              <option value="motion_control">运动控制</option>
+              <option value="building_auto">楼宇自控</option>
+              <option value="water_treatment">水处理</option>
+              <option value="communication">通信协议</option>
+            </select>
+          </div>
+          <div class="card">
+            <div class="card-header">⚙️ 程序参数</div>
+            <div class="space-y-3">
+              <div><label class="text-xs text-[#94a3b8]">程序名称</label><input class="neon-input" id="prog-name" value="MainProgram"></div>
+              <div><label class="text-xs text-[#94a3b8]">控制类型</label>
+                <select class="neon-input" id="control-type">
+                  <option value="start_stop">启停控制</option><option value="interlock">互锁控制</option>
+                  <option value="sequential">顺序控制（状态机）</option><option value="pid">PID 过程控制</option>
+                  <option value="conveyor">传送带控制</option><option value="motor_control">电机控制</option>
+                  <option value="basic">基础框架</option>
+                </select>
+              </div>
+              <div><label class="text-xs text-[#94a3b8]">功能描述</label><textarea class="neon-input" id="prog-desc" rows="2" placeholder="简要描述程序功能..."></textarea></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">🔌 IO 点配置</div>
+            <div id="io-config" class="space-y-2 max-h-48 overflow-y-auto"></div>
+            <button class="neon-btn btn-secondary w-full mt-3 text-sm" onclick="addIOPoint()">＋ 添加IO点</button>
+          </div>
+          <div class="card">
+            <div class="card-header">📦 输出选项</div>
+            <label class="flex items-center gap-2 text-sm mb-2"><input type="checkbox" id="opt-io-map" checked> 生成 IO 映射表</label>
+            <label class="flex items-center gap-2 text-sm mb-2"><input type="checkbox" id="opt-docs" checked> 生成功能文档</label>
+            <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="opt-pack"> 打包项目文件</label>
+          </div>
+        </div>
+
+        <!-- 右侧：代码预览 -->
+        <div class="lg:col-span-2 space-y-5">
+          <div class="card">
+            <div class="card-header flex justify-between">
+              <span>📝 ST 代码编辑器</span>
+              <span class="text-xs text-[#94a3b8]" id="code-status">就绪</span>
+            </div>
+            <textarea class="code-editor" id="code-editor" spellcheck="false" placeholder="点击「生成代码」创建 ST 程序..."></textarea>
+            <div class="flex justify-between mt-3">
+              <div class="flex gap-2">
+                <button class="neon-btn btn-secondary text-xs" onclick="copyCode()">📋 复制</button>
+                <button class="neon-btn btn-secondary text-xs" onclick="saveProject()">💾 保存项目</button>
+              </div>
+              <button class="neon-btn btn-success text-xs" onclick="exportProject()">📥 导出项目</button>
+            </div>
+          </div>
+          <div class="card" id="result-panel" style="display:none">
+            <div class="card-header">✅ 生成结果</div>
+            <div id="result-content" class="text-sm space-y-2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== Tab: 模板库 ========== -->
+    <div id="tab-templates" class="tab-content hidden space-y-5">
+      <h2 class="text-2xl font-display font-bold">📋 模板库</h2>
+      <div class="flex gap-2 flex-wrap" id="template-filters"></div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="template-grid"></div>
+    </div>
+
+    <!-- ========== Tab: 项目管理 ========== -->
+    <div id="tab-projects" class="tab-content hidden space-y-5">
+      <div class="flex items-center justify-between">
+        <h2 class="text-2xl font-display font-bold">📁 项目管理</h2>
+        <button class="neon-btn btn-secondary" onclick="loadProjects()">🔄 刷新</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="project-grid"></div>
+    </div>
+
+    <!-- ========== Tab: 知识库 ========== -->
+    <div id="tab-knowledge" class="tab-content hidden space-y-5">
+      <h2 class="text-2xl font-display font-bold">📚 知识库</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="card" onclick="alert('IEC 61131-3 ST 语言标准参考')">
+          <div class="card-header">📖 IEC 61131-3 标准</div>
+          <p class="text-sm text-[#94a3b8]">ST 结构化文本语法规范、数据类型、功能块标准</p>
+        </div>
+        <div class="card" onclick="alert('各厂家 ST 语法差异对照')">
+          <div class="card-header">🔧 平台差异手册</div>
+          <p class="text-sm text-[#94a3b8]">Siemens / Beckhoff / AB / Mitsubishi / Omron 差异对比</p>
+        </div>
+        <div class="card" onclick="alert('PLC 编程最佳实践与安全准则')">
+          <div class="card-header">🛡️ 最佳实践</div>
+          <p class="text-sm text-[#94a3b8]">编程规范、安全准则、代码审查清单</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ==================== 全局状态 ====================
+const API = 'http://localhost:5001/api';
+let selectedPlatform = 'siemens';
+let currentCode = '';
+let ioPoints = [
+  { name: 'StartButton', address: '%I0.0', type: 'BOOL', direction: 'input', comment: '启动按钮' },
+  { name: 'StopButton', address: '%I0.1', type: 'BOOL', direction: 'input', comment: '停止按钮' },
+  { name: 'MotorOutput', address: '%Q0.0', type: 'BOOL', direction: 'output', comment: '电机输出' },
+];
+
+// ==================== 初始化 ====================
+document.addEventListener('DOMContentLoaded', () => {
+  loadPlatforms();
+  loadTemplates();
+  loadProjects();
+  renderIOConfig();
+});
+
+// ==================== 标签切换 ====================
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.remove('hidden');
+  document.querySelector('[data-tab="'+tab+'"]').classList.add('active');
+  if (tab === 'templates') loadTemplates();
+  if (tab === 'projects') loadProjects();
+}
+
+// ==================== 平台 ====================
+async function loadPlatforms() {
+  try {
+    const res = await fetch(API + '/platforms');
+    const platforms = await res.json();
+    const container = document.getElementById('platform-chips');
+    container.innerHTML = platforms.map(p => 
+      `<span class="platform-chip ${p.id === selectedPlatform ? 'selected' : ''}" 
+             onclick="selectPlatform('${p.id}')" title="${p.name}">${p.name}</span>`
+    ).join('');
+  } catch(e) { console.error(e); }
+}
+function selectPlatform(id) {
+  selectedPlatform = id;
+  document.querySelectorAll('.platform-chip').forEach(c => c.classList.remove('selected'));
+  event.target.classList.add('selected');
+}
+
+// ==================== IO 配置 ====================
+function renderIOConfig() {
+  const container = document.getElementById('io-config');
+  container.innerHTML = ioPoints.map((io, i) => `
+    <div class="flex gap-2 items-center text-sm bg-[#0a0e17] p-2 rounded border border-[#1e293b]">
+      <select class="neon-input w-20 py-1 text-xs" value="${io.direction}" onchange="ioPoints[${i}].direction=this.value">
+        <option ${io.direction==='input'?'selected':''}>input</option>
+        <option ${io.direction==='output'?'selected':''}>output</option>
+      </select>
+      <input class="neon-input flex-1 py-1 text-xs" value="${io.name}" onchange="ioPoints[${i}].name=this.value" placeholder="名称">
+      <input class="neon-input w-24 py-1 text-xs" value="${io.address}" onchange="ioPoints[${i}].address=this.value" placeholder="地址">
+      <select class="neon-input w-20 py-1 text-xs" value="${io.type}" onchange="ioPoints[${i}].type=this.value">
+        <option ${io.type==='BOOL'?'selected':''}>BOOL</option>
+        <option ${io.type==='INT'?'selected':''}>INT</option>
+        <option ${io.type==='REAL'?'selected':''}>REAL</option>
+        <option ${io.type==='WORD'?'selected':''}>WORD</option>
+      </select>
+      <button class="text-red-400 hover:text-red-300 text-xs" onclick="ioPoints.splice(${i},1);renderIOConfig()">✕</button>
+    </div>
+  `).join('');
+}
+function addIOPoint() {
+  ioPoints.push({ name: 'NewSignal', address: '', type: 'BOOL', direction: 'input', comment: '' });
+  renderIOConfig();
+}
+
+// ==================== 生成代码 ====================
+async function generateCode() {
+  const progName = document.getElementById('prog-name').value || 'MainProgram';
+  const scenario = document.getElementById('scenario-select').value;
+  const controlType = document.getElementById('control-type').value;
+  const desc = document.getElementById('prog-desc').value;
+  
+  const params = {
+    program_name: progName,
+    description: desc,
+    io_points: ioPoints,
+    config: { control_type: controlType }
+  };
+  
+  const opts = {
+    generate_io_map: document.getElementById('opt-io-map').checked,
+    generate_docs: document.getElementById('opt-docs').checked,
+    pack_project: document.getElementById('opt-pack').checked
+  };
+
+  showToast('⏳ 正在生成 ST 代码...');
+  document.getElementById('code-status').innerHTML = '<span class="loading"></span> 生成中...';
+
+  try {
+    const res = await fetch(API + '/generate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform: selectedPlatform, scenario, params, options: opts })
+    });
+    const data = await res.json();
+    
+    currentCode = data.code;
+    document.getElementById('code-editor').value = currentCode;
+    document.getElementById('code-status').textContent = '✅ 生成完成';
+    
+    // 显示结果
+    const panel = document.getElementById('result-panel');
+    const content = document.getElementById('result-content');
+    panel.style.display = 'block';
+    let html = `<p>✅ <b>ST 代码已生成</b> — 平台: ${data.platform}, 场景: ${data.scenario}</p>`;
+    if (data.io_map) html += `<p>📊 IO映射: ${data.io_map.summary.total_points} 个点 (DI:${data.io_map.summary.digital_inputs}, DO:${data.io_map.summary.digital_outputs})</p>`;
+    if (data.docs) html += `<p>📄 文档已生成 (IO清单 + 功能说明 + 变量表)</p>`;
+    if (data.project_path) html += `<p>📦 项目已打包: ${data.project_path}</p>`;
+    content.innerHTML = html;
+    
+    showToast('✅ ST 代码生成成功！');
+  } catch(e) {
+    document.getElementById('code-status').textContent = '❌ 生成失败';
+    showToast('❌ 生成失败: ' + e.message);
+  }
+}
+
+// ==================== 校验 ====================
+async function validateCode() {
+  const code = document.getElementById('code-editor').value;
+  if (!code) { showToast('⚠️ 请先生成或输入代码'); return; }
+  
+  const res = await fetch(API + '/validate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, platform: selectedPlatform })
+  });
+  const result = await res.json();
+  if (result.valid) {
+    showToast('✅ 语法检查通过！');
+  } else {
+    showToast('❌ 语法错误: ' + result.errors.join('; '));
+  }
+}
+
+// ==================== 项目 ====================
+async function saveProject() {
+  if (!currentCode) { showToast('⚠️ 请先生成代码'); return; }
+  const progName = document.getElementById('prog-name').value || 'MainProgram';
+  const scenario = document.getElementById('scenario-select').value;
+
+  const res = await fetch(API + '/projects', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: progName, platform: selectedPlatform, scenario, code: currentCode })
+  });
+  const data = await res.json();
+  showToast('💾 项目已保存: ' + data.id);
+  loadProjects();
+}
+
+async function exportProject() {
+  if (!currentCode) { showToast('⚠️ 请先生成代码'); return; }
+  const res = await fetch(API + '/export', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: currentCode, platform: selectedPlatform })
+  });
+  const data = await res.json();
+  showToast('📥 项目已导出: ' + data.project_path);
+}
+
+async function loadProjects() {
+  try {
+    const res = await fetch(API + '/projects');
+    const projects = await res.json();
+    const grid = document.getElementById('project-grid');
+    if (!projects.length) {
+      grid.innerHTML = '<p class="text-[#94a3b8] col-span-full">暂无项目，先生成一个 ST 程序吧</p>';
+      return;
+    }
+    grid.innerHTML = projects.reverse().slice(0, 12).map(p => `
+      <div class="card hover:border-[#00f0ff] transition-all cursor-pointer" onclick="loadProjectCode('${p.id}')">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-lg">📄</span>
+          <span class="font-bold text-sm">${p.name}</span>
+        </div>
+        <div class="flex gap-1 flex-wrap mb-2">
+          <span class="tag">${p.platform}</span>
+          <span class="tag">${p.scenario}</span>
+        </div>
+        <p class="text-xs text-[#94a3b8]">${new Date(p.created).toLocaleString()}</p>
+      </div>
+    `).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function loadProjectCode(id) {
+  const res = await fetch(API + '/projects/' + id);
+  const p = await res.json();
+  document.getElementById('code-editor').value = p.code || '';
+  currentCode = p.code || '';
+  switchTab('generate');
+  showToast('📂 已加载项目: ' + p.name);
+}
+
+// ==================== 模板 ====================
+async function loadTemplates() {
+  try {
+    const res = await fetch(API + '/templates');
+    const templates = await res.json();
+    const grid = document.getElementById('template-grid');
+    if (!templates.length) { grid.innerHTML = '<p class="text-[#94a3b8] col-span-full">模板加载中...</p>'; return; }
+    
+    // 场景过滤
+    const scenarios = [...new Set(templates.map(t => t.scenario))];
+    document.getElementById('template-filters').innerHTML = 
+      '<span class="platform-chip selected" onclick="filterTemplates(\'all\')">全部</span>' +
+      scenarios.map(s => `<span class="platform-chip" onclick="filterTemplates('${s}')">${s}</span>`).join('');
+    
+    window.allTemplates = templates;
+    renderTemplateGrid(templates);
+  } catch(e) { console.error(e); }
+}
+
+function filterTemplates(scenario) {
+  document.querySelectorAll('#template-filters .platform-chip').forEach(c => c.classList.remove('selected'));
+  event.target.classList.add('selected');
+  const filtered = scenario === 'all' ? window.allTemplates : window.allTemplates.filter(t => t.scenario === scenario);
+  renderTemplateGrid(filtered);
+}
+
+function renderTemplateGrid(templates) {
+  const grid = document.getElementById('template-grid');
+  if (!templates.length) { grid.innerHTML = '<p class="text-[#94a3b8] col-span-full">该场景暂无模板</p>'; return; }
+  grid.innerHTML = templates.map(t => `
+    <div class="card hover:border-[#00f0ff] transition-all cursor-pointer" onclick="loadTemplate('${t.scenario}','${t.name}')">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-lg">📋</span>
+        <span class="font-bold text-sm">${t.name}</span>
+      </div>
+      <p class="text-xs text-[#94a3b8] mb-2">${t.description || ''}</p>
+      <div class="flex gap-1 flex-wrap">
+        <span class="tag">${t.scenario}</span>
+        ${(t.tags||[]).map(tg => `<span class="tag">${tg}</span>`).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+async function loadTemplate(scenario, name) {
+  try {
+    const res = await fetch(API + '/templates/' + scenario + '/' + name);
+    const data = await res.json();
+    if (data.content) {
+      document.getElementById('code-editor').value = data.content;
+      currentCode = data.content;
+      switchTab('generate');
+      showToast('📋 已加载模板: ' + name);
+    }
+  } catch(e) { console.error(e); }
+}
+
+// ==================== 工具 ====================
+function copyCode() {
+  const code = document.getElementById('code-editor').value;
+  navigator.clipboard.writeText(code).then(() => showToast('📋 已复制到剪贴板'));
+}
+
+function showToast(msg) {
+  const toast = document.createElement('div');
+  toast.className = 'toast'; toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+function onScenarioChange() {
+  // 切换场景时可以联动模板等
+}
+</script>
+</body>
+</html>

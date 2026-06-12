@@ -1,0 +1,89 @@
+{
+  "system": {
+    "name": "PLC编程体系",
+    "version": "1.0.0",
+    "port": 5001,
+    "host": "0.0.0.0",
+    "language": "zh-CN"
+  },
+  "platforms": {
+    "siemens": {
+      "name": "Siemens (TIA Portal / STEP 7)",
+      "extension": ".scl",
+      "io_format": "%I{byte}.{bit} / %Q{byte}.{bit}",
+      "timer_type": "TON",
+      "counter_type": "CTU",
+      "comment_syntax": "//",
+      "features": ["scl", "lad", "fbd", "graph"]
+    },
+    "beckhoff": {
+      "name": "Beckhoff (TwinCAT)",
+      "extension": ".TcPOU",
+      "io_format": "AT %I* / AT %Q*",
+      "timer_type": "TON",
+      "counter_type": "CTU",
+      "comment_syntax": "//",
+      "features": ["st", "ld", "fbd", "sfc", "cfl"]
+    },
+    "codesys": {
+      "name": "CODESYS 通用",
+      "extension": ".exp",
+      "io_format": "AT %I* / AT %Q*",
+      "timer_type": "TON",
+      "counter_type": "CTU",
+      "comment_syntax": "//",
+      "features": ["st", "ld", "fbd", "sfc", "cfl"]
+    },
+    "allen_bradley": {
+      "name": "Allen-Bradley (Studio 5000)",
+      "extension": ".L5X",
+      "io_format": "Local:{slot}:I.Data / Local:{slot}:O.Data",
+      "timer_type": "TON",
+      "counter_type": "CTU",
+      "comment_syntax": "//",
+      "features": ["st", "ld", "fbd", "sfc"]
+    },
+    "mitsubishi": {
+      "name": "Mitsubishi (GX Works)",
+      "extension": ".st",
+      "io_format": "X{hex} / Y{hex}",
+      "timer_type": "TIM",
+      "counter_type": "CNT",
+      "comment_syntax": "(* ... *)",
+      "features": ["st", "ld", "sfc"]
+    },
+    "omron": {
+      "name": "Omron (Sysmac Studio)",
+      "extension": ".st",
+      "io_format": "%{address}",
+      "timer_type": "TON",
+      "counter_type": "CTU",
+      "comment_syntax": "//",
+      "features": ["st", "ld", "fbd"]
+    },
+    "generic": {
+      "name": "IEC 61131-3 通用",
+      "extension": ".st",
+      "io_format": "AT %I* / AT %Q*",
+      "timer_type": "TON",
+      "counter_type": "CTU",
+      "comment_syntax": "//",
+      "features": ["st"]
+    }
+  },
+  "scenarios": {
+    "basic_logic": "基础逻辑控制",
+    "production_line": "产线自动化",
+    "process_control": "过程控制",
+    "motion_control": "运动控制",
+    "building_auto": "楼宇自控",
+    "water_treatment": "水处理",
+    "communication": "通信协议"
+  },
+  "paths": {
+    "templates": "模板/",
+    "output": "输出/",
+    "knowledge_base": "知识库/",
+    "skills": "技能/"
+  }
+}
