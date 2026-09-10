@@ -81,6 +81,11 @@ class PlatformAdapter:
             # AB: 移除 AT %I/Q 格式，改用标签
             code = re.sub(r'AT\s+%[IQ](\d+)\.(\d+)\s*', '', code)
 
+        elif "inovance" in platform_id or "汇川" in platform.get("name", ""):
+            # 汇川 AutoShop: %I → %IX, %Q → %QX
+            code = re.sub(r'%I(\d+)\.(\d+)', r'%IX\1.\2', code)
+            code = re.sub(r'%Q(\d+)\.(\d+)', r'%QX\1.\2', code)
+
         return code
 
     def _adapt_timers_counters(self, code: str, platform: dict) -> str:

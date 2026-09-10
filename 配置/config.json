@@ -34,6 +34,15 @@
       "comment_syntax": "//",
       "features": ["st", "ld", "fbd", "sfc", "cfl"]
     },
+    "inovance": {
+      "name": "汇川 (AutoShop)",
+      "extension": ".st",
+      "io_format": "%IX0.0 / %QX0.0",
+      "timer_type": "TON",
+      "counter_type": "CTU",
+      "comment_syntax": "//",
+      "features": ["st", "ld", "fbd", "sfc"]
+    },
     "allen_bradley": {
       "name": "Allen-Bradley (Studio 5000)",
       "extension": ".L5X",
